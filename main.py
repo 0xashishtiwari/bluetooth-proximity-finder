@@ -1,19 +1,41 @@
 import asyncio
-from proximity_finder.scanner import scan_once
+from proximity_finder.scanner import scan_continuously
+from proximity_finder.tracker import DeviceTracker
 
 
 async def main():
-    print("------Bluetooth Proximity Finder------")
-    print("Scanning for nearby Bluetooth devices...")
-
-    devices = await scan_once(timeout=10.0)
+    tracker = DeviceTracker(timeout=10.0)
     
-    devices.sort(key=lambda d: d.rssi, reverse=True)
+    def handle_observation(observation):
+        tracker.update(observation)
     
-    print(f"Found {len(devices)} devices:")
+    scanner_task = asyncio.create_task(scan_continuously(handle_observation))
+    
+    try:
+        print("---------Bluetooth Proximity Finder---------")
+        print("Surveying for nearby Bluetooth devices...")
+        
+        while True:
+            devices = tracker.get_devices()
+            
+            print("\033[2J\033[H", end="")
+            print("------ Bluetooth Proximity Finder ------")
+            print(f"Nearby devices: {len(devices)}\n")
+            
+            for address, device in devices:
+                print(f"Name: {device['name']}, Address: {address}, RSSI: {device['rssi']}")
 
-    for device in devices:
-        print(f"Address: {device.address}, Name: {device.name}, RSSI: {device.rssi} dBm")
+            await asyncio.sleep(1)
+        
+    finally:
+        scanner_task.cancel()
+        try:
+            await scanner_task
+        except asyncio.CancelledError:
+            pass
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nExiting Bluetooth Proximity Finder.")
